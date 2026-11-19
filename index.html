@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Villa Belloli — Mappa Interattiva Sopralluogo</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-icon">🎬</div>
+      <div>
+        <h1>Villa Belloli — Location Scouting</h1>
+        <p>Via Battista Belloli Industriale 21–23, Inveruno (MI)</p>
+      </div>
+    </div>
+
+    <div class="controls-group">
+      <div class="level-switcher" id="floor-switcher" title="Livello attivo">
+        <button class="level-btn active" data-floor="pt">Piano Terra</button>
+        <button class="level-btn" data-floor="p1">Primo Piano</button>
+      </div>
+
+      <div class="view-toggles">
+        <button class="toggle-btn active" id="btn-toggle-sat" title="Attiva/Disattiva vista satellitare">🛰️ Satellite</button>
+        <button class="toggle-btn" id="btn-toggle-plan" title="Attiva/Disattiva planimetria">📐 Planimetria</button>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="btn-secondary" id="btn-edit-mode" title="Trascina i simboli sulla mappa per spostarli">✏️ Sposta</button>
+      <button class="btn-primary" id="btn-add-point" title="Aggiungi un nuovo punto sulla mappa">➕ Aggiungi</button>
+      <button class="btn-secondary" id="btn-export" title="Esporta tutto il progetto in JSON">💾 Esporta</button>
+      <label class="btn-secondary" title="Importa progetto da file JSON" style="cursor:pointer;">
+        📂 Importa
+        <input type="file" id="input-import" accept=".json" style="display:none;" />
+      </label>
+    </div>
+  </header>
+
+  <!-- Filter Bar -->
+  <div class="filterbar">
+    <span class="filter-label">Filtri Mappa:</span>
+    <button class="filter-pill active" data-cat="shooting">
+      <span class="dot" style="background:var(--accent-shooting)"></span>
+      🎬 Stanze Shooting <span class="count" id="cnt-shooting">0</span>
+    </button>
+    <button class="filter-pill active" data-cat="stufa">
+      <span class="dot" style="background:var(--accent-stufa-9)"></span>
+      🔥 Posizione Stufe <span class="count" id="cnt-stufa">0</span>
+    </button>
+    <button class="filter-pill active" data-cat="parking">
+      <span class="dot" style="background:var(--accent-parking)"></span>
+      🚚 Parcheggio Mezzi & Logistica <span class="count" id="cnt-parking">0</span>
+    </button>
+    <button class="filter-pill active" data-cat="facilities">
+      <span class="dot" style="background:var(--accent-facilities)"></span>
+      🍽️ Facilities & Catering <span class="count" id="cnt-facilities">0</span>
+    </button>
+    <button class="filter-pill active" data-cat="streetview">
+      <span class="dot" style="background:var(--accent-streetview)"></span>
+      📍 Street View / Esterni <span class="count" id="cnt-streetview">0</span>
+    </button>
+
+    <div class="filter-presets">
+      <button class="preset-btn" id="preset-all">Mostra Tutto</button>
+      <button class="preset-btn" id="preset-shooting">Solo Shooting</button>
+      <button class="preset-btn" id="preset-logistics">Logistica & Stufe</button>
+    </div>
+  </div>
+
+  <!-- Workspace -->
+  <main class="workspace">
+    <!-- Left Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="🔍 Cerca stanza, zona..." />
+        <button class="sidebar-close-btn" id="btn-close-sidebar" title="Nascondi elenco">✕</button>
+      </div>
+      <div class="sidebar-list" id="sidebar-list"></div>
+      <div class="heater-summary" id="heater-summary">
+        <div class="heater-summary-title">
+          <span>🔥 Riscaldamento NoloClimat</span>
+          <span id="heater-total-kw">56 kW</span>
+        </div>
+        <div class="heater-legend">
+          <span class="heater-chip"><span class="heater-swatch" style="background:#1d4ed8"></span> 3 kW (×4)</span>
+          <span class="heater-chip"><span class="heater-swatch" style="background:#06b6d4"></span> 5 kW (×6)</span>
+          <span class="heater-chip"><span class="heater-swatch" style="background:#ef4444"></span> 9 kW (×2)</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Map Area -->
+    <section class="map-stage">
+      <button class="sidebar-toggle" id="btn-toggle-sidebar">☰ Elenco</button>
+      <div id="map"></div>
+
+      <!-- Satellite Overlay Controls (solo calibrazione in edit mode) -->
+      <div class="sat-controls" id="sat-controls">
+        <button class="btn-secondary" id="btn-toggle-calib" style="width:100%;">🎯 Allinea Manualmente</button>
+        <div class="calib-panel" id="calib-panel" style="display:none;">
+          <div class="calib-row">
+            <span>Nord ↔ Sud</span>
+            <span id="calib-north-val">0 m</span>
+          </div>
+          <input type="range" id="calib-north" min="-50" max="50" step="0.5" value="0" />
+
+          <div class="calib-row">
+            <span>Ovest ↔ Est</span>
+            <span id="calib-east-val">0 m</span>
+          </div>
+          <input type="range" id="calib-east" min="-50" max="50" step="0.5" value="0" />
+
+          <div class="calib-row">
+            <span>Rotazione</span>
+            <span id="calib-rot-val">0°</span>
+          </div>
+          <input type="range" id="calib-rot" min="-45" max="45" step="0.5" value="0" />
+
+          <div class="calib-row">
+            <span>Scala</span>
+            <span id="calib-scale-val">100%</span>
+          </div>
+          <input type="range" id="calib-scale" min="60" max="150" step="1" value="100" />
+
+          <div class="calib-actions">
+            <button class="btn-secondary" id="btn-calib-reset" style="flex:1;">↺ Ripristina</button>
+            <button class="btn-primary" id="btn-calib-save" style="flex:1;">💾 Salva</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Room / Point Detail Drawer -->
+      <aside class="drawer" id="drawer">
+        <div class="drawer-header">
+          <div>
+            <span class="drawer-tag" id="drawer-tag">Categoria</span>
+            <h2 id="drawer-title">Titolo Stanza</h2>
+            <p class="drawer-subtitle" id="drawer-subtitle"></p>
+          </div>
+          <button class="drawer-close" id="btn-close-drawer" title="Chiudi (Esc)">✕</button>
+        </div>
+
+        <div class="drawer-tabs">
+          <button class="drawer-tab active" data-tab="gallery">📸 Galleria Foto & Video</button>
+          <button class="drawer-tab" data-tab="specs">📋 Scheda Tecnica</button>
+        </div>
+
+        <div class="drawer-body" id="drawer-body"></div>
+      </aside>
+    </section>
+  </main>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox">
+    <button class="lightbox-close" id="lb-close">✕</button>
+    <img id="lb-img" src="" alt="" />
+    <div class="lightbox-bar">
+      <button class="btn-secondary" id="lb-prev">◀ Prec</button>
+      <span id="lb-caption"></span>
+      <button class="btn-secondary" id="lb-next">Succ ▶</button>
+    </div>
+  </div>
+
+  <!-- Add Point Modal -->
+  <div class="modal-backdrop" id="add-modal">
+    <div class="modal-card">
+      <h3>➕ Nuovo Elemento sulla Mappa</h3>
+      <label class="modal-field">
+        <span>Nome</span>
+        <input type="text" id="add-name" placeholder="es. Zona Catering, Parcheggio Furgoni..." />
+      </label>
+      <label class="modal-field">
+        <span>Categoria</span>
+        <select id="add-category">
+          <option value="shooting">🎬 Stanze Shooting</option>
+          <option value="stufa">🔥 Posizione Stufe</option>
+          <option value="parking">🚚 Parcheggio Mezzi & Logistica</option>
+          <option value="facilities">🍽️ Facilities & Catering</option>
+          <option value="streetview">📍 Street View / Esterni</option>
+        </select>
+      </label>
+      <label class="modal-field" id="add-kw-wrap" style="display:none;">
+        <span>Potenza Stufa</span>
+        <select id="add-kw">
+          <option value="3">3 kW</option>
+          <option value="5">5 kW</option>
+          <option value="9">9 kW</option>
+        </select>
+      </label>
+      <label class="modal-field">
+        <span>Livello</span>
+        <select id="add-floor">
+          <option value="pt">Piano Terra</option>
+          <option value="p1">Primo Piano</option>
+        </select>
+      </label>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="btn-add-cancel">Annulla</button>
+        <button class="btn-primary" id="btn-add-confirm">Posiziona sulla Mappa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Media Picker Modal -->
+  <div class="modal-backdrop" id="media-modal">
+    <div class="modal-card modal-card-wide">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <h3>📸 Assegna Foto & Video alla Zona</h3>
+        <button class="drawer-close" id="btn-media-close">✕</button>
+      </div>
+      <div class="media-add-bar">
+        <label class="btn-secondary" style="cursor:pointer;white-space:nowrap;">
+          📂 Carica Foto / Video dal PC
+          <input type="file" id="input-upload-photo" accept="image/*,video/*" multiple style="display:none;" />
+        </label>
+        <input type="text" id="input-ext-media" placeholder="Oppure nome file in cartella / URL (es. foto.jpg, video.mp4, https://...)" style="flex:1;" />
+        <button class="btn-primary" id="btn-add-ext-media">➕ Aggiungi</button>
+      </div>
+      <div class="media-picker-grid" id="media-picker-grid"></div>
+      <div class="modal-actions" style="margin-top:12px;">
+        <button class="btn-primary" id="btn-media-done">✓ Fatto</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
